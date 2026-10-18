@@ -12,7 +12,7 @@
 ![Discord](https://img.shields.io/badge/delivers%20to-Discord-5865F2?logo=discord&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
-[What the model is asked](#what-the-model-is-asked) · [How a run goes](#how-a-run-goes) · [Running it](#running-it) · [Configuration](#configuration) · [Development](#development)
+[How it fits together](#how-it-fits-together) · [What the model is asked](#what-the-model-is-asked) · [How a run goes](#how-a-run-goes) · [Running it](#running-it) · [Configuration](#configuration) · [Development](#development)
 
 </div>
 
@@ -23,6 +23,21 @@ It's a plain scheduled job, not an agent:
 - [medium-reader-mcp](https://github.com/wkbaran/medium-reader-mcp) runs as a child process. Its digest tools fetch the three feeds, drop posts already reported, rank the headlines against your `interests.md` (with its classifier), lay out the message and keep the state.
 - [cron-llm](https://github.com/wkbaran/cron-llm) calls any OpenAI-compatible gateway with a JSON schema per question, and posts to the Discord webhook.
 - The model answers three kinds of narrow questions: which headlines to read, what each post argues (type, gist, depth 1–5, why), and which posts to star. The code checks every answer: refs must exist in the right section, at most 10 Following (3 per publication), 5 top picks and 10 For you, and at most the server's ⭐ limit (8). All of these are settings.
+
+## How it fits together
+
+```mermaid
+flowchart LR
+  cron["supercronic"] --> job["medium-digest<br/>prompts + checks"]
+  job -- "cron-llm" --> llm["LiteLLM → model"]
+  job -- "MCP over stdio" --> mcp["medium-reader-mcp<br/>work list · state · layout"]
+  mcp --> api["Medium"]
+  mcp -. "headline ranks (Jev)" .-> llm
+  mcp -.- libs[("job-ledger · paced-fetch<br/>state files · API pacing")]
+  job -- "webhook" --> discord["Discord"]
+```
+
+The job holds only the prompts and the checks on each answer. [cron-llm](https://github.com/wkbaran/cron-llm) gives it the model calls, the MCP client and the Discord post. The MCP server owns everything with consequences: the API, the state and the message layout, on [job-ledger](https://github.com/wkbaran/job-ledger) for state and [paced-fetch](https://github.com/wkbaran/paced-fetch) for API pacing. The model never touches state or the API directly. The other jobs ([substack-digest](https://github.com/wkbaran/substack-digest), [spotify-discovery](https://github.com/wkbaran/spotify-discovery)) have the same shape with a different server.
 
 ## What the model is asked
 
