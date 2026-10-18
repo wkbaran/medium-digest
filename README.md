@@ -28,15 +28,19 @@ It's a plain scheduled job, not an agent:
 
 ```mermaid
 flowchart LR
-  cron["supercronic"] --> job["`**medium-digest**
-prompts + checks`"]
-  job -- "cron-llm" --> llm["LiteLLM → model"]
-  job -- "MCP over stdio" --> mcp["`**medium-reader-mcp**
-work list · state · layout`"]
+  cron["supercronic"] --> job
+  subgraph job["medium-digest"]
+    jp["prompts + checks"]
+    jc["cron-llm runtime"]
+  end
+  subgraph mcp["medium-reader-mcp"]
+    mp["work list · state · layout"]
+    ml["job-ledger: state files<br/>paced-fetch: API pacing"]
+  end
+  job -- "model calls" --> llm["LiteLLM → model"]
+  job -- "MCP over stdio" --> mcp
   mcp --> api["Medium"]
   mcp -. "headline ranks (Jev)" .-> llm
-  mcp -.- libs[("`job-ledger · paced-fetch
-state files · API pacing`")]
   job -- "webhook" --> discord["Discord"]
 ```
 
