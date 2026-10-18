@@ -1,4 +1,20 @@
-# medium-digest
+<div align="center">
+
+# Medium Digest
+
+**A daily Medium digest: shortlisted from the headlines, read in full, the best starred, posted to Discord.**
+
+![Node 26+](https://img.shields.io/badge/node-26%2B-339933?logo=nodedotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+![Runs in](https://img.shields.io/badge/runs%20in-Docker%20%2B%20supercronic-2496ED?logo=docker&logoColor=white)
+![LLM](https://img.shields.io/badge/LLM-OpenAI--compatible-412991)
+![MCP](https://img.shields.io/badge/uses-medium--reader--mcp-6E56CF)
+![Discord](https://img.shields.io/badge/delivers%20to-Discord-5865F2?logo=discord&logoColor=white)
+![License: MIT](https://img.shields.io/badge/license-MIT-blue)
+
+[How a run goes](#how-a-run-goes) · [Running it](#running-it) · [Configuration](#configuration) · [Development](#development)
+
+</div>
 
 A daily Medium digest posted to a Discord channel: new posts from the authors and publications you follow, Medium's top picks, and your "For you" recommendations. A model shortlists from the headlines, reads each shortlisted post in full, and stars the few worth reading in full.
 
