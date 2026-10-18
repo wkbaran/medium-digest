@@ -23,7 +23,7 @@ export type PostVerdict = z.infer<typeof PostVerdict>;
 
 export const Picks = z.object({
   picks: z
-    .array(z.object({ ref: z.string().describe('A ref from the list, e.g. "F3".'), why: z.string().min(1).describe("One sentence on why it's worth reading in full.") }))
+    .array(z.object({ ref: z.string().describe('A ref from the list, e.g. "F3".'), why: z.string().min(1).describe("One short sentence, under 30 words, on why it's worth reading in full.") }))
     .describe("Best first. Usually 3–6, never more than 8; none if nothing is strong."),
 });
 export type Picks = z.infer<typeof Picks>;
@@ -165,7 +165,7 @@ export function picksPrompt(candidates: PickCandidate[], interests: string, max:
       "- Start with depth 4–5. Rank up posts that match the interests and authors the reader reads.",
       "- Rank down listicles and announcements, whatever their depth, and preview-only posts.",
       `- Usually 3–6, never more than ${max}. If nothing is strong, pick none rather than padding.`,
-      "List them best first, each with one sentence on why it's worth reading in full.",
+      "List them best first, each with one short sentence (under 30 words; the digest cuts at 250 characters) on why it's worth reading in full. Name what's distinctive; don't restate the gist.",
     ]
       .filter((l) => l !== "")
       .join("\n"),
