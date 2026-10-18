@@ -25,10 +25,23 @@ await runJob("medium-digest", async ({ env, dryRun, log }) => {
       log,
       dryRun,
       reauth: env.MEDIUM_REAUTH_HINT ?? "Run `medium-reader-mcp login` on a machine with a browser and copy the new auth.json into the job's auth directory.",
-      maxPostChars: env.MAX_POST_CHARS ? Number(env.MAX_POST_CHARS) : undefined,
+      maxPostChars: positive(env.MAX_POST_CHARS),
+      // How many headlines the model may shortlist; the ⭐ count and text lengths come from the server's limits.
+      caps: {
+        following: positive(env.SHORTLIST_FOLLOWING),
+        top_picks: positive(env.SHORTLIST_TOP_PICKS),
+        for_you: positive(env.SHORTLIST_FOR_YOU),
+        perPublication: positive(env.SHORTLIST_PER_PUBLICATION),
+      },
     });
   } finally {
     await server.close();
     log(`tokens: ${llm.usage.prompt_tokens} in, ${llm.usage.completion_tokens} out over ${llm.usage.calls} calls`);
   }
 });
+
+/** A positive whole number from env, or undefined for the default. */
+function positive(raw: string | undefined): number | undefined {
+  const n = Number(raw);
+  return raw && Number.isInteger(n) && n > 0 ? n : undefined;
+}

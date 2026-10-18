@@ -6,7 +6,7 @@ It's a plain scheduled job, not an agent:
 
 - [medium-reader-mcp](https://github.com/wkbaran/medium-reader-mcp) runs as a child process. Its digest tools fetch the three feeds, drop posts already reported, rank the headlines against your `interests.md` (with its classifier), lay out the message and keep the state.
 - [cron-llm](https://github.com/wkbaran/cron-llm) calls any OpenAI-compatible gateway with a JSON schema per question, and posts to the Discord webhook.
-- The model answers three kinds of narrow questions: which headlines to read, what each post argues (type, gist, depth 1–5, why), and which posts to star. The code checks every answer: refs must exist in the right section, at most 10 Following (3 per publication), 5 top picks and 10 For you, at most 8 stars.
+- The model answers three kinds of narrow questions: which headlines to read, what each post argues (type, gist, depth 1–5, why), and which posts to star. The code checks every answer: refs must exist in the right section, at most 10 Following (3 per publication), 5 top picks and 10 For you, and at most the server's ⭐ limit (8). All of these are settings.
 
 ## How a run goes
 
@@ -50,6 +50,8 @@ The container runs as uid 1000; the state and auth directories should belong to 
 | `DISCORD_FAILURE_WEBHOOK_URL` | Where failure notices go; defaults to the digest webhook |
 | `MEDIUM_READER_*`, `TZ` | Passed to medium-reader-mcp, and nothing else from the job's environment is. `MEDIUM_READER_DIGEST_DIR` defaults to `/data` and `MEDIUM_READER_HOME` to `/auth`. The server's default classifier, `sampling`, needs an agent host, so set `MEDIUM_READER_CLASSIFIER=jev` (or `off`). See its README for the rest |
 | `MEDIUM_REAUTH_HINT` | What to do when the session expires; it's sent in place of the digest |
+| `MEDIUM_READER_DIGEST_GIST_MAX`, `_STAR_GIST_MAX`, `_WHY_MAX`, `_MAX_STARRED` | The server's limits. `digest_begin` returns them, and the job writes the same numbers into its prompts and schemas, so the model is asked for what the server keeps. Set them here, not in the prompts |
+| `SHORTLIST_FOLLOWING`, `SHORTLIST_TOP_PICKS`, `SHORTLIST_FOR_YOU`, `SHORTLIST_PER_PUBLICATION` | How many headlines may be shortlisted from each section, and from one publication in Following (default 10, 5, 10, 3), also stated in the shortlist prompt |
 | `MAX_POST_CHARS` | How much of one post the model reads (default 60000) |
 | `JOB_DRY_RUN=1` | Same as `--dry-run` |
 

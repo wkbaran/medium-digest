@@ -34,6 +34,7 @@ const work = {
   interests: "- Databases",
   skip: "- Income claims",
   warnings: [],
+  limits: { starred: 8, star_gist: 400, why: 120, gist: 240 },
 };
 
 function fakeServer(over: Partial<Record<string, (args: any) => string>> = {}, list = work) {
@@ -102,6 +103,10 @@ describe("runDigest", () => {
     expect(lines).toContain("shortlist: ignoring F99 (not a following ref in this run)");
     expect(lines).toContain("picks: ignoring unknown ref Q7");
     expect(lines).toContain(work.classifier);
+    // The server's limits are what the model is asked for.
+    expect(asked.find((a) => a.name === "post_verdict")!.user).toContain("at most 240 characters (about 40 words)");
+    expect(asked.find((a) => a.name === "picks")!.user).toContain("at most 120 characters (about 20 words)");
+    expect(asked.find((a) => a.name === "picks")!.user).toContain("never more than 8");
 
     const finish = calls.find((c) => c.name === "digest_finish")!.args;
     expect(finish).toEqual({

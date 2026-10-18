@@ -1,6 +1,6 @@
 import { McpToolError, StructuredOutputError } from "cron-llm";
 import { z } from "zod";
-import { Candidate, Caps, PickCandidate, Picks, picksPrompt, PostVerdict, postPrompt, Shortlist, shortlistPrompt } from "./prompts.js";
+import { type Candidate, type Caps, type Limits, type PickCandidate, picksPrompt, picksSchema, type PostVerdict, postPrompt, postVerdict, Shortlist, shortlistPrompt } from "./prompts.js";
 
 // One digest run: digest_begin, shortlist from the headlines, read and judge each
 // shortlisted post, choose the picks, then digest_finish. The server owns refs,
@@ -27,7 +27,6 @@ export interface DigestOptions {
   /** Characters of one post the model sees; read_post pages are fetched up to this. */
   maxPostChars?: number;
   caps?: Partial<Caps>;
-  maxPicks?: number;
 }
 
 /** digest_begin's structuredContent (medium-reader-mcp 0.7.0+). Extra fields are ignored. */
@@ -55,6 +54,8 @@ export const WorkList = z.object({
   interests: z.string(),
   skip: z.string(),
   warnings: z.array(z.string()),
+  /** medium-reader-mcp 0.8.0+; older servers get their fixed limits. */
+  limits: z.object({ starred: z.number(), star_gist: z.number(), why: z.number(), gist: z.number() }).default({ starred: 8, star_gist: 400, why: 250, gist: 280 }),
 });
 export type WorkList = z.infer<typeof WorkList>;
 
@@ -68,7 +69,7 @@ const SECTION = { following: "following", top: "top_picks", for_you: "for_you" }
 /** Runs the digest and returns the message to post, or null when there's nothing to say. */
 export async function runDigest(opts: DigestOptions): Promise<string | null> {
   const { server, llm, log } = opts;
-  const caps = { ...DEFAULT_CAPS, ...opts.caps };
+  const caps: Caps = { ...DEFAULT_CAPS, ...Object.fromEntries(Object.entries(opts.caps ?? {}).filter(([, v]) => v !== undefined)) };
 
   let work: WorkList;
   try {
@@ -81,6 +82,8 @@ export async function runDigest(opts: DigestOptions): Promise<string | null> {
     throw err;
   }
   const tags = [`run:${work.run_id}`];
+  const limits: Limits = work.limits;
+  const PostVerdict = postVerdict(limits);
   const candidates: Candidate[] = work.items
     .filter((i) => i.status === "listed" || i.status === "omitted" || i.status === "low")
     .map((i) => ({ ...i, low: i.status === "low" }));
@@ -109,7 +112,7 @@ export async function runDigest(opts: DigestOptions): Promise<string | null> {
       continue;
     }
     try {
-      const verdict = await llm.structured(PostVerdict, postPrompt({ text: read.text, truncated: read.truncated, interests: work.interests }), { name: "post_verdict", tags: [...tags, "step:post"] });
+      const verdict = await llm.structured(PostVerdict, postPrompt({ text: read.text, truncated: read.truncated, interests: work.interests, limits }), { name: "post_verdict", tags: [...tags, "step:post"] });
       verdicts.set(c.ref, { verdict, previewOnly: read.previewOnly });
       log(`${c.ref} (${n + 1}/${chosen.length}): depth ${verdict.depth}, ${verdict.type}${read.previewOnly ? ", preview only" : ""}`);
     } catch (err) {
@@ -126,7 +129,7 @@ export async function runDigest(opts: DigestOptions): Promise<string | null> {
     if (!v?.verdict) return [];
     return [{ ref: c.ref, title: c.title, author: c.author, publication: c.publication, type: v.verdict.type, depth: v.verdict.depth, why: v.verdict.why, gist: v.verdict.gist, previewOnly: v.previewOnly, read: c.read, rank: c.rank }];
   });
-  const picks = await choosePicks(opts, pickable, work.interests, tags);
+  const picks = await choosePicks(opts, pickable, work.interests, tags, limits);
   log(`picks: ${picks.map((p) => p.ref).join(", ") || "none"}`);
 
   // 4. Finish: picks starred, every other read post in its section.
@@ -199,20 +202,20 @@ async function chooseShortlist(opts: DigestOptions, candidates: Candidate[], wor
   };
 }
 
-/** The model's picks, checked: known refs, no repeats, at most `maxPicks`. Falls back to depth. */
-async function choosePicks(opts: DigestOptions, candidates: PickCandidate[], interests: string, tags: string[]): Promise<{ ref: string; why: string }[]> {
-  const max = opts.maxPicks ?? 8;
+/** The model's picks, checked: known refs, no repeats, at most the server's `starred` limit. Falls back to depth. */
+async function choosePicks(opts: DigestOptions, candidates: PickCandidate[], interests: string, tags: string[], limits: Limits): Promise<{ ref: string; why: string }[]> {
+  const max = limits.starred;
   if (!candidates.length) return [];
   let proposed: { ref: string; why: string }[];
   try {
-    proposed = (await opts.llm.structured(Picks, picksPrompt(candidates, interests, max), { name: "picks", tags: [...tags, "step:picks"] })).picks;
+    proposed = (await opts.llm.structured(picksSchema(limits), picksPrompt(candidates, interests, limits), { name: "picks", tags: [...tags, "step:picks"] })).picks;
   } catch (err) {
     if (!(err instanceof StructuredOutputError)) throw err;
     opts.log(`picks: no usable answer (${err.message}); falling back to depth`);
     proposed = [...candidates]
       .filter((c) => c.depth >= 4 && !c.previewOnly && !["listicle", "announcement"].includes(c.type))
       .sort((a, b) => b.depth - a.depth || (b.rank ?? 50) - (a.rank ?? 50))
-      .slice(0, 6)
+      .slice(0, Math.min(6, max))
       .map((c) => ({ ref: c.ref, why: c.why }));
   }
   const byRef = new Map(candidates.map((c) => [c.ref.toUpperCase(), c]));

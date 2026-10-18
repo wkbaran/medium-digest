@@ -13,20 +13,38 @@ export const Shortlist = z.object({
 });
 export type Shortlist = z.infer<typeof Shortlist>;
 
-export const PostVerdict = z.object({
-  type: z.enum(POST_TYPES),
-  gist: z.string().min(1).describe("At most 2 short sentences and 40 words: the actual argument or findings, not the topic."),
-  depth: z.number().int().min(1).max(5).describe("How much is lost by reading only the gist: 5 = dense original thinking or evidence that doesn't compress; 1 = the gist covers it."),
-  why: z.string().min(1).describe("One sentence justifying depth, naming what's distinctive."),
-});
-export type PostVerdict = z.infer<typeof PostVerdict>;
+/**
+ * What digest_finish accepts, from digest_begin's `limits` (the server's
+ * MEDIUM_READER_DIGEST_*_MAX and _MAX_STARRED settings): the most ⭐ picks and
+ * lengths in characters. They go into every prompt and schema below, so the
+ * model is asked for what the server keeps.
+ */
+export interface Limits {
+  starred: number;
+  star_gist: number;
+  why: number;
+  gist: number;
+}
 
-export const Picks = z.object({
-  picks: z
-    .array(z.object({ ref: z.string().describe('A ref from the list, e.g. "F3".'), why: z.string().min(1).describe("One short sentence, under 30 words, on why it's worth reading in full.") }))
-    .describe("Best first. Usually 3–6, never more than 8; none if nothing is strong."),
-});
-export type Picks = z.infer<typeof Picks>;
+/** "at most 280 characters (about 45 words)": models count words better than characters. */
+export const atMost = (chars: number) => `at most ${chars} characters (about ${Math.max(5, Math.round(chars / 6))} words)`;
+
+/** The gist is written before it's known whether the post becomes a ⭐ pick, so it has to fit a section line. */
+export const postVerdict = (l: Limits) =>
+  z.object({
+    type: z.enum(POST_TYPES),
+    gist: z.string().min(1).describe(`1–2 sentences, ${atMost(Math.min(l.gist, l.star_gist))}: the actual argument or findings, not the topic.`),
+    depth: z.number().int().min(1).max(5).describe("How much is lost by reading only the gist: 5 = dense original thinking or evidence that doesn't compress; 1 = the gist covers it."),
+    why: z.string().min(1).describe("One sentence justifying depth, naming what's distinctive."),
+  });
+export type PostVerdict = z.infer<ReturnType<typeof postVerdict>>;
+
+export const picksSchema = (l: Limits) =>
+  z.object({
+    picks: z
+      .array(z.object({ ref: z.string().describe('A ref from the list, e.g. "F3".'), why: z.string().min(1).describe(`One sentence, ${atMost(l.why)}, on why it's worth reading in full.`) }))
+      .describe(`Best first. Usually 3–6, never more than ${l.starred}; none if nothing is strong.`),
+  });
 
 export interface Candidate {
   ref: string;
@@ -105,7 +123,7 @@ export function shortlistPrompt(c: { candidates: Candidate[]; interests: string;
   };
 }
 
-export function postPrompt(p: { text: string; truncated: boolean; interests: string }): { system: string; user: string } {
+export function postPrompt(p: { text: string; truncated: boolean; interests: string; limits: Limits }): { system: string; user: string } {
   return {
     system:
       "You read one Medium post for a daily digest and report what it says. Judge only from the text given. " +
@@ -117,7 +135,7 @@ export function postPrompt(p: { text: string; truncated: boolean; interests: str
       p.truncated ? "\n[The post continues; only the part above was given.]" : "",
       "",
       "type: what kind of post this is.",
-      'gist: the actual argument or findings in at most 2 short sentences and 40 words. Lead with the claim; skip "This post…" and "The author…". For a listicle, name its strongest item.',
+      `gist: the actual argument or findings in 1–2 sentences, ${atMost(Math.min(p.limits.gist, p.limits.star_gist))}. Lead with the claim; skip "This post…" and "The author…". For a listicle, name its strongest item.`,
       "depth: 1–5, how much is lost by reading only the gist.",
       "why: one sentence justifying depth.",
     ]
@@ -140,7 +158,7 @@ export interface PickCandidate {
   rank?: number;
 }
 
-export function picksPrompt(candidates: PickCandidate[], interests: string, max: number): { system: string; user: string } {
+export function picksPrompt(candidates: PickCandidate[], interests: string, limits: Limits): { system: string; user: string } {
   const rows = candidates.map((c) =>
     [
       c.ref,
@@ -164,8 +182,8 @@ export function picksPrompt(candidates: PickCandidate[], interests: string, max:
       "Choose the picks:",
       "- Start with depth 4–5. Rank up posts that match the interests and authors the reader reads.",
       "- Rank down listicles and announcements, whatever their depth, and preview-only posts.",
-      `- Usually 3–6, never more than ${max}. If nothing is strong, pick none rather than padding.`,
-      "List them best first, each with one short sentence (under 30 words; the digest cuts at 250 characters) on why it's worth reading in full. Name what's distinctive; don't restate the gist.",
+      `- Usually 3–6, never more than ${limits.starred}. If nothing is strong, pick none rather than padding.`,
+      `List them best first, each with one sentence, ${atMost(limits.why)}, on why it's worth reading in full. Name what's distinctive; don't restate the gist.`,
     ]
       .filter((l) => l !== "")
       .join("\n"),
