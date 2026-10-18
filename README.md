@@ -12,7 +12,7 @@
 ![Discord](https://img.shields.io/badge/delivers%20to-Discord-5865F2?logo=discord&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
-[How a run goes](#how-a-run-goes) · [Running it](#running-it) · [Configuration](#configuration) · [Development](#development)
+[What the model is asked](#what-the-model-is-asked) · [How a run goes](#how-a-run-goes) · [Running it](#running-it) · [Configuration](#configuration) · [Development](#development)
 
 </div>
 
@@ -23,6 +23,32 @@ It's a plain scheduled job, not an agent:
 - [medium-reader-mcp](https://github.com/wkbaran/medium-reader-mcp) runs as a child process. Its digest tools fetch the three feeds, drop posts already reported, rank the headlines against your `interests.md` (with its classifier), lay out the message and keep the state.
 - [cron-llm](https://github.com/wkbaran/cron-llm) calls any OpenAI-compatible gateway with a JSON schema per question, and posts to the Discord webhook.
 - The model answers three kinds of narrow questions: which headlines to read, what each post argues (type, gist, depth 1–5, why), and which posts to star. The code checks every answer: refs must exist in the right section, at most 10 Following (3 per publication), 5 top picks and 10 For you, and at most the server's ⭐ limit (8). All of these are settings.
+
+## What the model is asked
+
+The model never sees the whole day at once. It answers three kinds of narrow question, each with a JSON schema, and every answer is checked by code. The questions are written to get past the usual failure of digest summaries: a sentence about what a post is *about*, which tells you nothing about whether to read it.
+
+**The shortlist, from headlines alone.** The model gets each section's candidates (Following `F`, Medium's Top picks `T`, For you `Y`) as rows: title, author and publication, reading time, claps, member-only, whether the reader read that author recently, why Medium showed it, and the classifier's rank when it's on (rows are sorted by it, since the rank already reflects the reader's interests and skips). Along with the reader's `interests.md` and recent reading, it chooses which posts get read in full:
+
+- up to a set number per section, at most a few from one publication; pass over near-duplicate headlines;
+- prefer authors the reader read recently, and For you posts shown because of reading history;
+- **fewer, or none, when a section is weak**: don't pad;
+- separately, list clear clickbait the classifier missed (income claims, listicle bait, rage bait).
+
+**One question per shortlisted post**, with the post's full text. The model is told to judge only from the text, never from the title.
+
+| Field | What it means |
+|---|---|
+| `type` | essay, reporting, analysis, tutorial, listicle, opinion, announcement or other |
+| `gist` | **The post's actual argument or findings, not its topic**, in 1–2 sentences. It leads with the claim ("Moving the cache to the edge halved p99 latency, because…"), never "This post discusses…" or "The author argues…". For a listicle, only its strongest item. It's written before the model knows whether the post will be starred, so it's held to the shorter of the section-line and star limits (`MEDIUM_READER_DIGEST_GIST_MAX`, `_STAR_GIST_MAX`), stated as characters and approximate words |
+| `depth` | 1–5: **how much you lose by reading only the gist.** 5 is dense original thinking or evidence that doesn't compress; 1 means the gist covers it |
+| `why` | One sentence justifying the depth, naming what's distinctive |
+
+The reader's interests are shown as context, with the instruction to describe the post as it is.
+
+**One question for the ⭐ picks**, over the verdicts: start from depth 4–5, rank up interests and authors the reader reads, rank down listicles, announcements and preview-only posts, usually 3–6 and **none rather than padding**. Each pick gets one sentence on why it's worth reading in full, naming what's distinctive rather than repeating the gist.
+
+The code then checks every answer: refs must exist in the right section, caps hold, and refs the model invents are dropped and logged. An answer that doesn't fit its schema costs that one post its gist, not the run.
 
 ## How a run goes
 
