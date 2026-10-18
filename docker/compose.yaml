@@ -1,0 +1,17 @@
+name: medium-digest
+
+services:
+  medium-digest:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: medium-digest
+    container_name: medium-digest
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      # Absolute paths on the Docker host, set in docker/.env. Compose expands "~"
+      # on the machine running it, which with `docker -H ssh://...` is the client.
+      # ":z" relabels for SELinux.
+      - ${DIGEST_DIR:?set DIGEST_DIR in docker/.env to the digest state directory}:/data:z
+      - ${AUTH_DIR:?set AUTH_DIR in docker/.env to the directory holding auth.json}:/auth:z

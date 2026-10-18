@@ -1,0 +1,2 @@
+# Times are in the container's TZ (set in docker/.env), so DST is handled.
+15 6 * * *  node /app/dist/main.js
