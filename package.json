@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "cron-llm": "^0.2.0",
-    "medium-reader-mcp": "^0.7.0",
+    "medium-reader-mcp": "^0.8.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
