@@ -38,7 +38,8 @@ await runJob("medium-digest", async ({ env, dryRun, log }) => {
     await server.close();
     log(`tokens: ${llm.usage.prompt_tokens} in, ${llm.usage.completion_tokens} out over ${llm.usage.calls} calls`);
   }
-});
+  // Its own name, so Discord doesn't run this digest together with the other job's posts.
+}, { username: "Medium" });
 
 /** A positive whole number from env, or undefined for the default. */
 function positive(raw: string | undefined): number | undefined {
